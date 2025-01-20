@@ -19,21 +19,22 @@ class DownloadResult:
 
 
 class INMETScraper:
-    """Class to handle downloading and extracting specific INMET weather data from Rio de Janeiro station A652"""
+    """Class to handle downloading and extracting specific INMET weather data from any available station"""
     
-    def __init__(self, output_dir: str = "rio_a652_station_data", start_year: int = 2019):
+    def __init__(self, station_identifier: str, start_year: int = 2019):
         """
         Initialize the INMET scraper
         
         Args:
+            station_identifier (str): Identifier of the station to download data from
             output_dir (str): Directory where files will be saved
             start_year (int): First year to consider for downloads
         """
         self.base_url = "https://portal.inmet.gov.br/uploads/dadoshistoricos"
-        self.output_dir = output_dir
+        self.output_dir = station_identifier.lower().replace(" ", "_") + "_station_data"
         self.start_year = start_year
         self.current_year = datetime.now().year
-        self.station_identifier = "INMET_SE_RJ_A652_RIO DE JANEIRO"
+        self.station_identifier = station_identifier
         
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ class INMETScraper:
 
     def process_year(self, year: int) -> DownloadResult:
         """
-        Download and extract Rio de Janeiro weather data for a specific year
+        Download and extract stattion's weather data for a specific year
         
         Args:
             year (int): Year to process
@@ -50,7 +51,7 @@ class INMETScraper:
         Returns:
             DownloadResult: Object containing processing attempt results
         """
-        output_file = os.path.join(self.output_dir, f"RJ_A652_{year}.parquet")
+        output_file = os.path.join(self.output_dir, f"{self.station_identifier.lower().replace(' ', '_')}_{year}.parquet")
 
         if os.path.exists(output_file):
             self.logger.info(f"File for {year} already exists, skipping...")
@@ -64,23 +65,23 @@ class INMETScraper:
             
             # Reads ZIP file in memory instead of saving to disk
             with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
-                rio_files = [
+                station_files = [
                     name for name in zip_ref.namelist() 
                     if self.station_identifier in name
                 ]
                 
-                if not rio_files:
+                if not station_files:
                     return DownloadResult(
                         year, 
                         False, 
-                        error_message=f"No Rio de Janeiro A652 station data found for {year}"
+                        error_message=f"No data found for station {self.station_identifier} in {year}"
                     )
                 
-                for station_file in rio_files:
+                for station_file in station_files:
                     with zip_ref.open(station_file) as f:
-                        df = pl.read_csv(f, separator=';', encoding='latin1', skip_rows=8)
+                        df = pl.read_csv(f, separator=';', encoding='lat', skip_rows=8)
                         df.write_parquet(output_file)
-                        self.logger.info(f"Successfully extracted Rio data for {year}")
+                        self.logger.info(f"Successfully extracted station data for {year}")
                         return DownloadResult(year, True, output_file)
                         
         except requests.exceptions.RequestException as e:
@@ -123,7 +124,7 @@ class INMETScraper:
 from inmet_scraper import INMETScraper
 
 def main():
-    scraper = INMETScraper(output_dir="rio_a652_station_data", start_year=2019)
+    scraper = INMETScraper(station_identifier="INMET_SE_RJ_A652_RIO DE JANEIRO", start_year=2019)
     
     results = scraper.process_all_years()
     
